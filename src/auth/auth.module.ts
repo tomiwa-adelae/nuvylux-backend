@@ -6,6 +6,7 @@ import { TokenService } from './token.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { LocalStrategy } from './strategies/local.strategies';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [JwtModule.register({})],
@@ -16,6 +17,7 @@ import { LocalStrategy } from './strategies/local.strategies';
     JwtAuthGuard,
     PrismaService,
     LocalStrategy,
+    JwtStrategy,
   ],
   exports: [TokenService, JwtAuthGuard],
 })
