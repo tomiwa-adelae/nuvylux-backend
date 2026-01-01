@@ -33,8 +33,6 @@ export class OnboardingService {
         'Oops! Please select at least 2 interests!',
       );
 
-    console.log(selectedInterests);
-
     const user = await this.prisma.user.findUnique({ where: { id } });
 
     if (!user) throw new NotFoundException('Oops! User not found');
