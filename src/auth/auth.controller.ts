@@ -41,7 +41,7 @@ export class AuthController {
 
     res.cookie('accessToken', access_token, {
       ...cookieOptions,
-      maxAge: 1 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     return res.json({ user, message: `Welcome back, ${user.firstName}` });

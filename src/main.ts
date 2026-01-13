@@ -14,9 +14,14 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL,
+    origin: true,
     credentials: true,
   });
+
+  // app.enableCors({
+  //   origin: process.env.FRONTEND_URL,
+  //   credentials: true,
+  // });
 
   app.use(cookieParser());
 
@@ -31,6 +36,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 8000);
+  // await app.listen(process.env.PORT ?? 8000);
+  await app.listen(process.env.PORT ?? 8000, '0.0.0.0');
 }
 bootstrap();

@@ -4,7 +4,7 @@ export const WelcomeEmail = ({ firstName }: { firstName: string }) => {
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Welcome to NUVYLUX</title>
+    <title>Welcome to Nuvylux</title>
     <style>
       body { 
         font-family: 'Playfair Display', 'Georgia', serif; 
@@ -84,11 +84,11 @@ export const WelcomeEmail = ({ firstName }: { firstName: string }) => {
     <div class="wrapper">
       <div class="container">
         <div class="header">
-          <h1>NUVYLUX</h1>
+          <h1>Nuvylux</h1>
         </div>
         <div class="content">
           <h2>Welcome to the Movement, ${firstName}.</h2>
-          <p>You have successfully entered the <span class="accent">NUVYLUX Global</span> ecosystem—the new light of luxury where beauty, fashion, and innovation unite.</p>
+          <p>You have successfully entered the <span class="accent">Nuvylux Global</span> ecosystem—the new light of luxury where beauty, fashion, and innovation unite.</p>
           <p>Your account is now active. You are invited to explore our verified marketplace, experience our AI-powered skincare intelligence, and connect with a global community of creators.</p>
           
           <div class="btn-container">
@@ -96,10 +96,10 @@ export const WelcomeEmail = ({ firstName }: { firstName: string }) => {
           </div>
 
           <p style="margin-top: 40px;">Stay visionary,</p>
-          <p><strong>The NUVYLUX Team</strong></p>
+          <p><strong>The Nuvylux Team</strong></p>
         </div>
         <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} NUVYLUX Global | AURANOVA Group</p>
+          <p>&copy; ${new Date().getFullYear()} Nuvylux Global | AURANOVA Group</p>
           <p>Lagos • Abuja • Ibadan</p>
           <p>If you did not create this account, please <a href="mailto:support@nuvylux.com">contact support</a>.</p>
         </div>

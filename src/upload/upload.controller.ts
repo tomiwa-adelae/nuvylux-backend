@@ -6,8 +6,10 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UploadedFiles,
+  Delete,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 
 @Controller('upload')
@@ -22,5 +24,15 @@ export class UploadController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.uploadService.uploadProfilePicture(userId, file);
+  }
+
+  @Post('brand-logo/:userId')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBrandLogo(
+    @UploadedFile() file: Express.Multer.File,
+    @Param('userId') userId: string,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.uploadService.uploadBrandLogo(userId, file);
   }
 }

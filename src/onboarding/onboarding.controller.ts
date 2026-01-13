@@ -18,6 +18,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enums/role.enum';
 import type { Response, Request as ExpressRequest } from 'express';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { CreateBrandDto } from './dto/create-brand.dto';
 
 @Controller('onboarding')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,5 +62,13 @@ export class OnboardingController {
       // @ts-ignore
       req?.user?.id!,
     );
+  }
+
+  @Post('brand')
+  @Roles(Role.USER) // Ensure they are logged in
+  async setupBrand(@Req() req: any, @Body() createBrandDto: CreateBrandDto) {
+    const userId = req.user.id;
+
+    return this.onboardingService.createBrandIdentity(createBrandDto, userId);
   }
 }
