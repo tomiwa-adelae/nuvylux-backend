@@ -28,7 +28,7 @@ export enum ProductStatus {
 export class CreateProductDto {
   @IsString()
   @MinLength(2)
-  @MaxLength(100)
+  @MaxLength(120)
   name: string;
 
   @IsString()
@@ -40,7 +40,7 @@ export class CreateProductDto {
 
   @IsString()
   @MinLength(2)
-  @MaxLength(120)
+  @MaxLength(240)
   shortDescription: string;
 
   @IsString()

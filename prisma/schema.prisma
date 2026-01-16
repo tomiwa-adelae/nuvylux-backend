@@ -22,8 +22,6 @@ model User {
   updatedAt    DateTime @updatedAt
   role         String
 
-  isDeleted Boolean @default(false)
-
   firstName String
   lastName  String
 
@@ -46,12 +44,16 @@ model User {
   image      String?
   joinedDate String?
 
+  isDeleted Boolean @default(false)
+
   interests String[]
 
-  roles UserRole[]
-  brand Brand[]
-
-  admin Admin?
+  admin      Admin?
+  roles      UserRole[]
+  brand      Brand[]
+  savedItems Saved[]
+  cartItems  CartItem[]
+  orders     Order[]
 }
 
 model Admin {
@@ -101,6 +103,8 @@ model Brand {
   userId    String
   products  Product[]
 
+  isDeleted Boolean @default(false)
+
   @@unique([userId])
 }
 
@@ -145,6 +149,12 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  isDeleted Boolean @default(false)
+
+  savedBy    Saved[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
   @@index([brandId])
 }
 
@@ -152,4 +162,139 @@ enum ProductStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+model Saved {
+  id String @id @default(uuid())
+
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  createdAt DateTime @default(now())
+
+  // One user can only save a specific product once
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  size      String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId, size, color])
+  @@index([userId])
+}
+
+// Add to your existing schema.prisma
+
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique @default(cuid()) // e.g., "ORDER-ABC123"
+
+  // Customer Info
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Shipping Details
+  shippingAddress ShippingAddress?
+
+  // Order Details
+  items       OrderItem[]
+  subtotal    Decimal     @db.Decimal(10, 2)
+  discount    Decimal     @default(0) @db.Decimal(10, 2)
+  deliveryFee Decimal     @default(15) @db.Decimal(10, 2)
+  total       Decimal     @db.Decimal(10, 2)
+
+  // Status
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Payment Info
+  paymentMethod  String? // "card", "bank_transfer", etc.
+  transactionRef String? @unique
+
+  // Notes
+  customerNote String? @db.Text
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  paidAt      DateTime?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id String @id @default(uuid())
+
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  // Snapshot of product at time of purchase
+  productName  String
+  productImage String
+  productSlug  String
+
+  quantity Int
+  price    Decimal @db.Decimal(10, 2) // Price at time of purchase
+  size     String?
+  color    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model ShippingAddress {
+  id String @id @default(uuid())
+
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @unique
+
+  firstName String
+  lastName  String
+  phone     String
+  address   String
+  city      String
+  state     String
+  country   String @default("Nigeria")
+
+  createdAt DateTime @default(now())
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
 }
