@@ -177,4 +177,23 @@ export class UploadService {
 
     return Promise.all(uploadPromises);
   }
+
+  async uploadServicesImages(serviceId: string, files: Express.Multer.File[]) {
+    const uploadPromises = files.map(async (file) => {
+      const key = `services/${serviceId}/${randomUUID()}-${file.originalname}`;
+
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        }),
+      );
+
+      return `${this.publicUrl}/${key}`;
+    });
+
+    return Promise.all(uploadPromises);
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateSavedDto } from './dto/create-saved.dto';
 import { UpdateSavedDto } from './dto/update-saved.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -28,6 +28,14 @@ export class SavedService {
   }
 
   async getUserSavedItems(userId: string) {
+    if (!userId) throw new NotFoundException('Oops! User ID not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException('Oops! User not found');
+
     return this.prisma.saved.findMany({
       where: { userId },
       include: { product: true }, // Returns the actual product data

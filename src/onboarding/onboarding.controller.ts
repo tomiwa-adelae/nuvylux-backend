@@ -19,6 +19,7 @@ import { Role } from 'src/common/enums/role.enum';
 import type { Response, Request as ExpressRequest } from 'express';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
+import { CreateArchitectDto } from './dto/create-architect.dto';
 
 @Controller('onboarding')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,6 +49,19 @@ export class OnboardingController {
       selectedInterests,
       // @ts-ignore
       req?.user?.id!,
+    );
+  }
+
+  @Post('architect-setup')
+  @Roles(Role.USER)
+  async setupArchitect(
+    @Req() req: any,
+    @Body() createArchitectDto: CreateArchitectDto,
+  ) {
+    const userId = req.user.id;
+    return this.onboardingService.createArchitectProfile(
+      createArchitectDto,
+      userId,
     );
   }
 

@@ -10,9 +10,11 @@ import { BrandModule } from './brand/brand.module';
 import { SavedModule } from './saved/saved.module';
 import { CartModule } from './cart/cart.module';
 import { OrderModule } from './order/order.module';
+import { UserModule } from './user/user.module';
+import { ServicesModule } from './services/services.module';
 
 @Module({
-  imports: [AuthModule, OnboardingModule, UploadModule, ProductModule, BrandModule, SavedModule, CartModule, OrderModule],
+  imports: [AuthModule, OnboardingModule, UploadModule, ProductModule, BrandModule, SavedModule, CartModule, OrderModule, UserModule, ServicesModule],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })

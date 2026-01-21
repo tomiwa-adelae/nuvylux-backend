@@ -1,6 +1,7 @@
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -10,6 +11,7 @@ import { UpdateOnboardingDto } from './dto/update-onboarding.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { SystemRole } from '@prisma/client';
+import { CreateArchitectDto } from './dto/create-architect.dto';
 
 @Injectable()
 export class OnboardingService {
@@ -49,27 +51,49 @@ export class OnboardingService {
   }
 
   async updateProfile(updateProfileDto: UpdateProfileDto, id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id } });
 
-    if (!user) throw new NotFoundException('Oops! User not found');
+      if (!user) throw new NotFoundException('Oops! User not found');
 
-    await this.prisma.user.update({
-      where: { id: user?.id },
-      data: { ...updateProfileDto },
-    });
+      await this.prisma.user.update({
+        where: { id: user?.id },
+        data: { ...updateProfileDto },
+      });
 
-    return { message: 'Profile successfully updated' };
+      return { message: 'Profile successfully updated' };
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new ConflictException(
+          'User with this email address already exist.',
+        );
+      }
+
+      throw new BadRequestException(
+        'Unable to update this profile at this time.',
+      );
+    }
   }
 
   async createBrandIdentity(dto: CreateBrandDto, userId: string) {
+    if (!userId) throw new NotFoundException('Oops! User ID not found');
+
     const { socialLinks, ...brandData } = dto;
 
     try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId, role: 'brand' },
+      });
+
+      if (!user) throw new NotFoundException('Oops! User not found');
+
       return await this.prisma.$transaction(async (tx) => {
         // 1. Check if a brand record already exists for this user (e.g., from a logo upload)
         const existingBrand = await tx.brand.findFirst({
-          where: { userId: userId },
+          where: { userId: user?.id },
         });
+
+        console.log('first');
 
         let brand;
 
@@ -100,10 +124,16 @@ export class OnboardingService {
           });
         }
 
+        console.log('second');
+
         // 4. Handle Socials: Clear old ones and add new ones to prevent duplicates
         await tx.socials.deleteMany({
           where: { brandId: brand.id },
         });
+
+        console.log('fourth');
+
+        console.log(socialLinks, dto);
 
         if (socialLinks && socialLinks.length > 0) {
           await tx.socials.createMany({
@@ -111,11 +141,12 @@ export class OnboardingService {
               .filter((link) => link.url && link.url.trim() !== '')
               .map((link) => ({
                 url: link.url,
-                userId: userId,
                 brandId: brand.id,
               })),
           });
         }
+
+        console.log('third');
 
         // 5. Ensure User Role is updated to BRAND
         await tx.userRole.upsert({
@@ -139,9 +170,72 @@ export class OnboardingService {
         };
       });
     } catch (error) {
+      console.log(error);
       console.error('Onboarding Error:', error);
       throw new InternalServerErrorException(
         'Failed to finalize brand identity',
+      );
+    }
+  }
+
+  async createArchitectProfile(dto: CreateArchitectDto, userId: string) {
+    if (!userId) throw new NotFoundException('User ID not found');
+
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) throw new NotFoundException('User not found');
+
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Upsert the Professional Profile
+        // Assuming your Prisma model is called 'professionalProfile'
+        const profile = await tx.professionalProfile.upsert({
+          where: { userId: userId },
+          update: {
+            profession: dto.profession,
+            yearsOfExperience: dto.yearsOfExperience,
+            bio: dto.bio,
+            instagram: dto.instagram,
+            website: dto.website,
+          },
+          create: {
+            userId: userId,
+            profession: dto.profession,
+            yearsOfExperience: dto.yearsOfExperience,
+            bio: dto.bio,
+            instagram: dto.instagram,
+            website: dto.website,
+          },
+        });
+
+        // 2. Ensure User Role is set to PROFESSIONAL / ARCHITECT
+        // Using SystemRole.PROFESSIONAL (adjust based on your Prisma enums)
+        await tx.userRole.upsert({
+          where: { userId_role: { userId, role: SystemRole.PROFESSIONAL } },
+          update: {},
+          create: { userId, role: SystemRole.PROFESSIONAL },
+        });
+
+        // 3. Return updated user with profile included
+        const updatedUser = await tx.user.findUnique({
+          where: { id: userId },
+          include: {
+            professionalProfile: true,
+            roles: true,
+          },
+        });
+
+        return {
+          message: 'Professional profile synchronized successfully',
+          user: updatedUser,
+        };
+      });
+    } catch (error) {
+      console.error('Architect Onboarding Error:', error);
+      throw new InternalServerErrorException(
+        'Failed to save professional details',
       );
     }
   }

@@ -6,12 +6,18 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderItemStatus, OrderStatus, PaymentStatus } from '@prisma/client';
 import { notDeleted } from 'src/utils/prismaFilters';
+const Flutterwave = require('flutterwave-node-v3');
 
 @Injectable()
 export class OrderService {
   constructor(private prisma: PrismaService) {}
+
+  private flw = new Flutterwave(
+    process.env.FW_PUBLIC_KEY,
+    process.env.FW_SECRET_KEY,
+  );
 
   private async generateOrderNumber(): Promise<string> {
     const prefix = 'NUV';
@@ -188,8 +194,6 @@ export class OrderService {
     };
   }
 
-  /* ---------- Queries ---------- */
-
   async findUserOrders(userId: string) {
     return this.prisma.order.findMany({
       where: { userId },
@@ -227,13 +231,348 @@ export class OrderService {
     if (!user) throw new NotFoundException('Oops! User not found');
 
     const order = await this.prisma.order.findUnique({
-      where: { orderNumber },
+      where: { orderNumber, userId: user?.id },
       include: {
         items: true,
         shippingAddress: true,
+        user: true,
       },
     });
 
     return order;
+  }
+
+  async cancelOrder(orderId: string, userId: string) {
+    if (!userId) throw new NotFoundException('Oops! User ID not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException('Oops! User not found');
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    // 2. Security & Validation
+    if (!order || order.userId !== userId) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Prevent cancellation if already shipped, delivered, or cancelled
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Order is already cancelled');
+    }
+
+    if (
+      order.shippedAt ||
+      order.status === OrderStatus.SHIPPED ||
+      order.status === OrderStatus.DELIVERED
+    ) {
+      throw new BadRequestException(
+        'Cannot cancel an order that has already been shipped or delivered',
+      );
+    }
+
+    // 3. Transaction: Update Order + Restock Products
+    return this.prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+        },
+      });
+
+      // 4. Return stock to products
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: { increment: item.quantity },
+          },
+        });
+      }
+
+      return {
+        message: 'Order cancelled successfully and stock restocked',
+        order: updatedOrder,
+      };
+    });
+  }
+
+  async initializePayment(orderNumber: string, userId: string) {
+    if (!userId) throw new NotFoundException('Oops! User ID not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) throw new NotFoundException('Oops! User not found');
+
+    const order = await this.findUserOrdersDetails(userId, orderNumber);
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.status === 'CANCELLED')
+      throw new BadRequestException('Cannot pay for a cancelled order');
+
+    if (order.paidAt) throw new BadRequestException('Order is already paid');
+
+    const paymentData = {
+      tx_ref: order.orderNumber, // Use orderNumber as reference
+      amount: order.total.toString(),
+      currency: 'NGN',
+      redirect_url: `${process.env.FRONTEND_URL}/orders/${order.orderNumber}?payment=success`,
+      customer: {
+        email: order.user?.email || 'customer@email.com', // Ensure your query includes user email
+        phonenumber: order?.shippingAddress?.phone,
+        name: `${order?.shippingAddress?.firstName} ${order?.shippingAddress?.lastName}`,
+      },
+      customizations: {
+        title: 'NUVYLUX Store',
+        description: `Payment for Order #${order.orderNumber}`,
+        // logo: 'https://your-logo-url.com/logo.png',
+      },
+    };
+
+    try {
+      const response = await fetch('https://api.flutterwave.com/v3/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.FW_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentData),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        return data; // This will contain the 'link' property
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      throw new BadRequestException('Payment gateway communication failed');
+    }
+  }
+
+  async verifyTransaction(txRef: string, transactionId: string) {
+    try {
+      const response = await fetch(
+        `https://api.flutterwave.com/v3/transactions/${transactionId}/verify`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${process.env.FW_SECRET_KEY}`,
+          },
+        },
+      );
+
+      const result = await response.json();
+
+      // 2. Check if payment is successful and amounts match
+      if (
+        result.status === 'success' &&
+        result.data.status === 'successful' &&
+        result.data.tx_ref === txRef
+      ) {
+        // 3. Update Order in Database
+        return await this.prisma.order.update({
+          where: { orderNumber: txRef },
+          data: {
+            paymentStatus: 'PAID',
+            paidAt: new Date(),
+            status: 'PROCESSING', // Move from PENDING to PROCESSING
+            transactionRef: transactionId,
+          },
+        });
+      }
+
+      // throw new Error('Transaction verification failed');
+    } catch (error) {
+      console.error('Verification Error:', error);
+      throw error;
+    }
+  }
+
+  async findBrandOrders(userId: string) {
+    if (!userId) throw new NotFoundException();
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, role: 'brand' },
+    });
+
+    if (!user) throw new NotFoundException('Oops! User not found');
+
+    const brand = await this.prisma.brand.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!brand) throw new NotFoundException('Oops! Brand not found');
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        items: {
+          some: {
+            product: { brandId: brand.id },
+          },
+        },
+      },
+      include: {
+        items: {
+          where: {
+            product: { brandId: brand.id },
+          },
+        },
+        shippingAddress: true,
+        user: { select: { email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Calculate brand-specific earnings for each order in the list
+    return orders.map((order) => {
+      const brandEarnings = order.items.reduce(
+        (acc, item) => acc + Number(item.price) * item.quantity,
+        0,
+      );
+
+      return {
+        ...order,
+        brandEarnings, // Add this field for the frontend list view
+      };
+    });
+  }
+
+  async findBrandOrderDetails(userId: string, orderNumber: string) {
+    // 1. Verify User and get their Brand ID
+    const brand = await this.prisma.brand.findUnique({
+      where: { userId },
+    });
+
+    if (!brand) {
+      throw new NotFoundException('Brand profile not found for this user.');
+    }
+
+    // 2. Find the order but filter the items by brandId
+    const order = await this.prisma.order.findUnique({
+      where: { orderNumber },
+      include: {
+        shippingAddress: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        // Here is the magic: Filter items at the database level
+        items: {
+          where: {
+            product: {
+              brandId: brand.id,
+            },
+          },
+        },
+      },
+    });
+
+    if (!order || order.items.length === 0) {
+      throw new NotFoundException(
+        'Order not found or contains no items from your brand.',
+      );
+    }
+
+    // 3. Optional: Calculate Brand-Specific Subtotal
+    // This is useful if the brand wants to see only what THEY earned from this order
+    const brandSubtotal = order.items.reduce(
+      (acc, item) => acc + Number(item.price) * item.quantity,
+      0,
+    );
+
+    return {
+      ...order,
+      brandSubtotal,
+    };
+  }
+
+  async updateBrandItemStatus(
+    userId: string,
+    orderId: string,
+    newStatus: OrderItemStatus,
+  ) {
+    if (!userId) throw new NotFoundException('Oops! User ID not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, role: 'brand' },
+    });
+
+    if (!user) throw new NotFoundException('Oops! User not found');
+
+    // 1. Find the brand associated with the user
+    const brand = await this.prisma.brand.findUnique({
+      where: { userId: user?.id },
+    });
+
+    if (!brand) throw new NotFoundException('Brand profile not found');
+
+    console.log('tomiwa');
+
+    // 2. Update all items in this order that belong to this brand
+    await this.prisma.orderItem.updateMany({
+      where: {
+        orderId: orderId,
+        product: { brandId: brand.id },
+      },
+      data: {
+        status: newStatus,
+        ...(newStatus === 'SHIPPED' ? { shippedAt: new Date() } : {}),
+        ...(newStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
+      },
+    });
+
+    console.log('busola');
+
+    // 3. LOGIC: Determine Global Order Status
+    const allItems = await this.prisma.orderItem.findMany({
+      where: { orderId },
+    });
+
+    const totalItems = allItems.length;
+    const shippedItems = allItems.filter(
+      (i) => i.status === 'SHIPPED' || i.status === 'DELIVERED',
+    ).length;
+    const deliveredItems = allItems.filter(
+      (i) => i.status === 'DELIVERED',
+    ).length;
+
+    let globalStatus: OrderStatus = OrderStatus.PROCESSING;
+
+    if (deliveredItems === totalItems) {
+      globalStatus = OrderStatus.DELIVERED;
+    } else if (shippedItems === totalItems) {
+      globalStatus = OrderStatus.SHIPPED;
+    } else if (shippedItems > 0 || deliveredItems > 0) {
+      // You might need to add PARTIALLY_SHIPPED to your OrderStatus enum in Prisma
+      globalStatus = OrderStatus.SHIPPED;
+    }
+
+    console.log('shade');
+
+    // 4. Update the parent order
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: globalStatus,
+        ...(globalStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
+        ...(globalStatus === 'SHIPPED' && !shippedItems
+          ? { shippedAt: new Date() }
+          : {}),
+      },
+    });
   }
 }

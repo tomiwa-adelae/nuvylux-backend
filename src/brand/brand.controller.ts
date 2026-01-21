@@ -29,7 +29,7 @@ export class BrandController {
   }
 
   @Get('details')
-  @Roles(Role.USER)
+  @Roles(Role.USER, Role.BRAND)
   getBrandDetails(@Req() req: ExpressRequest) {
     return this.brandService.getBrandDetails(
       // @ts-ignore

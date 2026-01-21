@@ -25,6 +25,7 @@ export class BrandService {
 
     const brand = await this.prisma.brand.findUnique({
       where: { userId: user.id },
+      include: { socials: true },
     });
 
     if (!brand) throw new NotFoundException('Oops! Brand not found');
