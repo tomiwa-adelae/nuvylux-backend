@@ -71,4 +71,8 @@ export class CreateServiceDto {
   @IsString()
   @IsOptional()
   thumbnail: string;
+
+  @IsOptional()
+  @IsString()
+  bookingRules?: string;
 }

@@ -93,8 +93,6 @@ export class OnboardingService {
           where: { userId: user?.id },
         });
 
-        console.log('first');
-
         let brand;
 
         if (existingBrand) {
@@ -124,16 +122,10 @@ export class OnboardingService {
           });
         }
 
-        console.log('second');
-
         // 4. Handle Socials: Clear old ones and add new ones to prevent duplicates
         await tx.socials.deleteMany({
           where: { brandId: brand.id },
         });
-
-        console.log('fourth');
-
-        console.log(socialLinks, dto);
 
         if (socialLinks && socialLinks.length > 0) {
           await tx.socials.createMany({
@@ -145,8 +137,6 @@ export class OnboardingService {
               })),
           });
         }
-
-        console.log('third');
 
         // 5. Ensure User Role is updated to BRAND
         await tx.userRole.upsert({
@@ -170,7 +160,6 @@ export class OnboardingService {
         };
       });
     } catch (error) {
-      console.log(error);
       console.error('Onboarding Error:', error);
       throw new InternalServerErrorException(
         'Failed to finalize brand identity',
@@ -195,6 +184,7 @@ export class OnboardingService {
           where: { userId: userId },
           update: {
             profession: dto.profession,
+            businessName: dto.businessName,
             yearsOfExperience: dto.yearsOfExperience,
             bio: dto.bio,
             instagram: dto.instagram,
@@ -203,6 +193,7 @@ export class OnboardingService {
           create: {
             userId: userId,
             profession: dto.profession,
+            businessName: dto.businessName,
             yearsOfExperience: dto.yearsOfExperience,
             bio: dto.bio,
             instagram: dto.instagram,

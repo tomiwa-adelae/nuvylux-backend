@@ -318,6 +318,7 @@ model ProfessionalProfile {
   id                String  @id @default(uuid())
   profession        String
   yearsOfExperience String
+  businessName      String
   bio               String?
   website           String?
   instagram         String?
@@ -327,6 +328,8 @@ model ProfessionalProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  service Service[]
 }
 
 enum ServiceType {
@@ -390,6 +393,9 @@ model Service {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id])
+  professionalProfileId String
 
   @@index([userId])
   @@index([status])

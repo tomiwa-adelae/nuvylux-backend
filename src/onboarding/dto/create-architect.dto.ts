@@ -13,6 +13,10 @@ export class CreateArchitectDto {
 
   @IsString()
   @IsNotEmpty()
+  businessName: string;
+
+  @IsString()
+  @IsNotEmpty()
   yearsOfExperience: string;
 
   @IsString()

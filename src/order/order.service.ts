@@ -520,8 +520,6 @@ export class OrderService {
 
     if (!brand) throw new NotFoundException('Brand profile not found');
 
-    console.log('tomiwa');
-
     // 2. Update all items in this order that belong to this brand
     await this.prisma.orderItem.updateMany({
       where: {
@@ -534,8 +532,6 @@ export class OrderService {
         ...(newStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
       },
     });
-
-    console.log('busola');
 
     // 3. LOGIC: Determine Global Order Status
     const allItems = await this.prisma.orderItem.findMany({
@@ -560,8 +556,6 @@ export class OrderService {
       // You might need to add PARTIALLY_SHIPPED to your OrderStatus enum in Prisma
       globalStatus = OrderStatus.SHIPPED;
     }
-
-    console.log('shade');
 
     // 4. Update the parent order
     return this.prisma.order.update({
