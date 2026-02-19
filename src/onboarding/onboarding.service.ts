@@ -6,12 +6,12 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateOnboardingDto } from './dto/create-onboarding.dto';
-import { UpdateOnboardingDto } from './dto/update-onboarding.dto';
+import { plainToClass } from 'class-transformer';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { SystemRole } from '@prisma/client';
 import { CreateArchitectDto } from './dto/create-architect.dto';
+import { UserResponseDto } from 'src/auth/dto/user-response.dto';
 
 @Injectable()
 export class OnboardingService {
@@ -26,7 +26,7 @@ export class OnboardingService {
 
     await this.prisma.user.update({
       where: { id: user?.id },
-      data: { role: createOnboardingDto.role },
+      data: { role: createOnboardingDto.role.toUpperCase() },
     });
 
     return { message: 'Role successfully updated' };
@@ -56,12 +56,17 @@ export class OnboardingService {
 
       if (!user) throw new NotFoundException('Oops! User not found');
 
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: user?.id },
-        data: { ...updateProfileDto },
+        data: { ...updateProfileDto, onboardingCompleted: true },
       });
 
-      return { message: 'Profile successfully updated' };
+      return {
+        message: 'Profile successfully updated',
+        user: plainToClass(UserResponseDto, updatedUser, {
+          excludeExtraneousValues: true,
+        }),
+      };
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException(
@@ -82,7 +87,7 @@ export class OnboardingService {
 
     try {
       const user = await this.prisma.user.findUnique({
-        where: { id: userId, role: 'brand' },
+        where: { id: userId, role: 'BRAND' },
       });
 
       if (!user) throw new NotFoundException('Oops! User not found');

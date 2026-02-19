@@ -92,7 +92,7 @@ export class ProductService {
     if (!userId) throw new NotFoundException('Oops! User ID not found');
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, role: 'brand' },
+      where: { id: userId, role: 'BRAND' },
     });
 
     if (!user) throw new NotFoundException('Oops! User not found');
@@ -114,7 +114,7 @@ export class ProductService {
     if (!userId) throw new NotFoundException('Oops! User ID not found');
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, role: 'brand' },
+      where: { id: userId, role: 'BRAND' },
     });
 
     if (!user) throw new NotFoundException('Oops! User not found');

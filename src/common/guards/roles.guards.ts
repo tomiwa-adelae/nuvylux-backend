@@ -25,12 +25,11 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    // ✅ Check if the user has a matching main role OR a matching schoolRole
     const hasRole =
-      requiredRoles.includes(user.role as Role) || // main role
+      requiredRoles.includes(user.role as Role) ||
       (user.roles || []).some((sr: any) =>
         requiredRoles.includes(sr.role as Role),
       );
-    return true;
+    return hasRole;
   }
 }

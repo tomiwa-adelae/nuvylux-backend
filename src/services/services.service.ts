@@ -29,7 +29,7 @@ export class ServicesService {
     if (!userId) throw new NotFoundException('Oops! User ID not found');
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, role: 'professional' },
+      where: { id: userId, role: 'PROFESSIONAL' },
       include: { professionalProfile: true },
     });
 
@@ -136,7 +136,7 @@ export class ServicesService {
     if (!userId) throw new NotFoundException('Oops! User ID not found');
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId, role: 'professional' },
+      where: { id: userId, role: 'PROFESSIONAL' },
     });
 
     if (!user) throw new NotFoundException('Oops! User not found');

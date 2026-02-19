@@ -204,6 +204,7 @@ export class AuthService {
         createdAt: true,
         updatedAt: true,
         role: true,
+        onboardingCompleted: true,
       },
     });
 
@@ -351,10 +352,9 @@ export class AuthService {
           { expiresIn: '7d' },
         );
 
-        const hashedRefresh = await bcrypt.hash(newRefreshToken, 10);
         await this.prisma.user.update({
           where: { id: user.id },
-          data: { refreshToken: hashedRefresh },
+          data: { refreshToken: newRefreshToken },
         });
 
         return { accessToken, newRefreshToken, user };

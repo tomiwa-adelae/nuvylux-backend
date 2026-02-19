@@ -28,12 +28,12 @@ import { Public } from 'src/decorators/public.decorator';
 
 // src/services/services.controller.ts
 @Controller('services')
-// @UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Post()
-  // @Roles(Role.PROFESSIONAL)
+  @Roles(Role.PROFESSIONAL, Role.ARTISAN)
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'thumbnail', maxCount: 1 }, // name must match frontend formData key
@@ -80,15 +80,15 @@ export class ServicesController {
   }
 
   @Get('')
-  // @Roles(Role.PROFESSIONAL)
+  @Roles(Role.PROFESSIONAL, Role.ARTISAN)
   async findMyServices(@Req() req: ExpressRequest) {
     // @ts-ignore
-    const userId = req.user.id;
+    const userId = req?.user?.id!;
     return this.servicesService.findAllByProfessional(userId);
   }
 
   @Get('/:slug')
-  // @Roles(Role.PROFESSIONAL)
+  @Roles(Role.PROFESSIONAL, Role.ARTISAN)
   getProductDetails(
     @Req() req: ExpressRequest,
     @Param('slug') serviceSlug: string,
@@ -101,7 +101,7 @@ export class ServicesController {
   }
 
   @Patch('/:id')
-  // @Roles(Role.PROFESSIONAL)
+  @Roles(Role.PROFESSIONAL, Role.ARTISAN)
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'thumbnail', maxCount: 1 },
@@ -137,7 +137,7 @@ export class ServicesController {
   }
 
   @Get('/public/explore')
-  // @Public() // If your setup requires this to bypass JwtAuthGuard
+  @Public() // If your setup requires this to bypass JwtAuthGuard
   async getExploreServices(
     @Req() req: ExpressRequest,
     @Query('type') type?: string,

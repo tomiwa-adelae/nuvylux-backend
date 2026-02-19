@@ -1,4 +1,4 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 
 export class UserResponseDto {
   @Expose()
@@ -28,18 +28,14 @@ export class UserResponseDto {
   @Expose()
   role: string;
 
+  @Expose()
+  onboardingCompleted: boolean;
+
   @Exclude()
   provider?: string;
 
-  // Add school info
-  @Expose()
-  schoolId?: string;
-
   @Expose()
   username?: string;
-
-  @Expose()
-  department?: string;
 
   @Expose()
   image?: string;
@@ -64,16 +60,4 @@ export class UserResponseDto {
 
   @Expose()
   phoneNumber?: string;
-
-  @Expose()
-  medicalConditions?: string;
-
-  @Expose()
-  title?: string;
-
-  @Expose()
-  Student?: any;
-
-  @Expose()
-  schoolRoles?: any;
 }

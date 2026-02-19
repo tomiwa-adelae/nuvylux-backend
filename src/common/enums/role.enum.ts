@@ -6,4 +6,5 @@ export enum Role {
   USER = 'USER',
   CREATORS = 'CREATORS',
   BRAND = 'BRAND',
+  ARTISAN = 'ARTISAN',
 }

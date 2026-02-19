@@ -33,7 +33,7 @@ export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   @Get()
-  @Roles(Role.USER)
+  @Roles(Role.USER, Role.CLIENT, Role.BRAND)
   getProducts(@Req() req: ExpressRequest) {
     return this.productService.getProducts(
       // @ts-ignore
@@ -42,7 +42,7 @@ export class ProductController {
   }
 
   @Get('/:slug')
-  @Roles(Role.USER)
+  @Roles(Role.USER, Role.CLIENT, Role.BRAND)
   getProductDetails(
     @Req() req: ExpressRequest,
     @Param('slug') productSlug: string,
@@ -125,7 +125,7 @@ export class ProductController {
   }
 
   @Delete('/:id')
-  @Roles(Role.USER) // Or Role.BRAND depending on your setup
+  @Roles(Role.USER, Role.CLIENT, Role.BRAND) // Or Role.BRAND depending on your setup
   async remove(@Param('id') id: string, @Req() req: any) {
     return this.productService.remove(id, req.user.id);
   }

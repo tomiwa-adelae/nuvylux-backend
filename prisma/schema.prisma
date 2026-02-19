@@ -44,7 +44,8 @@ model User {
   image      String?
   joinedDate String?
 
-  isDeleted Boolean @default(false)
+  isDeleted           Boolean @default(false)
+  onboardingCompleted Boolean @default(false)
 
   interests String[]
 
@@ -55,16 +56,27 @@ model User {
   cartItems           CartItem[]
   orders              Order[]
   professionalProfile ProfessionalProfile?
-  services            Service[]
+  // This user acting as a CLIENT (the one who books)
+  bookings            ServiceBooking[]     @relation("ClientBookings")
+
+  // This user acting as a PROVIDER (the one who owns the service)
+  services        Service[]
+  serviceBookings ServiceBooking[]
+}
+
+enum AdminPosition {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
 }
 
 model Admin {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  position  String?
-  user      User     @relation(fields: [userId], references: [id])
+  id        String        @id @default(uuid())
+  userId    String        @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  position  AdminPosition @default(ADMIN)
+  user      User          @relation(fields: [userId], references: [id])
 }
 
 model UserRole {
@@ -396,7 +408,54 @@ model Service {
 
   professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id])
   professionalProfileId String
+  bookings              ServiceBooking[]
 
   @@index([userId])
   @@index([status])
+}
+
+model ServiceBooking {
+  id            String @id @default(uuid())
+  bookingNumber String @unique @default(cuid())
+
+  // Relations
+  service   Service @relation(fields: [serviceId], references: [id])
+  serviceId String
+
+  // RELATION: The User who is the CLIENT
+  client   User   @relation("ClientBookings", fields: [clientId], references: [id])
+  clientId String
+
+  // Booking Data
+  scheduledAt  DateTime? // For consultations (combine date + time string from frontend)
+  requirements String    @db.Text
+  attachments  String[] // URLs from Cloudflare
+
+  // Status Logic
+  status        BookingStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  price       Decimal @db.Decimal(10, 2)
+  serviceFee  Decimal @db.Decimal(10, 2)
+  totalAmount Decimal @db.Decimal(10, 2)
+
+  paymentMethod  String? // "card", "bank_transfer", etc.
+  transactionRef String? @unique
+
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
+
+  @@index([clientId])
+  @@index([serviceId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
