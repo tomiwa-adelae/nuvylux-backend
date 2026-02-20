@@ -13,15 +13,23 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
+  // Allow only the configured frontend origin (set FRONTEND_URL in env).
+  // 'credentials: true' is required for httpOnly cookie-based auth to work
+  // across different domains (Vercel frontend <-> Render backend).
+  const allowedOrigins = (process.env.FRONTEND_URL ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow server-to-server / SSR requests (no origin header)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} is not allowed`));
+    },
     credentials: true,
   });
-
-  // app.enableCors({
-  //   origin: process.env.FRONTEND_URL,
-  //   credentials: true,
-  // });
 
   app.use(cookieParser());
 

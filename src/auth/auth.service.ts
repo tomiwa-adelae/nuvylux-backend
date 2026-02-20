@@ -68,8 +68,11 @@ export class AuthService {
     return {
       httpOnly: true,
       secure: isProd,
+      // 'none' is required for cross-domain cookies (Vercel <-> Render).
+      // 'lax' is fine for same-origin local dev.
       sameSite: isProd ? ('none' as const) : ('lax' as const),
-      domain: isProd ? '.zionstand.com' : undefined, // only use domain in production
+      // Do NOT set domain when frontend and backend are on different TLDs.
+      // The browser scopes the cookie to the backend's own domain automatically.
       path: '/',
     };
   }
