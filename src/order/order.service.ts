@@ -64,6 +64,7 @@ export class OrderService {
       state,
       customerNote,
       totalAmount,
+      paymentMethod = 'online',
     } = dto;
 
     if (!items.length) {
@@ -132,6 +133,8 @@ export class OrderService {
       // Generate the sequential order number within the transaction
       const orderNumber = await this.generateOrderNumber();
 
+      const isPOD = paymentMethod === 'pay_on_delivery';
+
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
@@ -140,8 +143,10 @@ export class OrderService {
           discount,
           deliveryFee,
           total,
-          status: OrderStatus.PENDING,
+          // POD orders are confirmed immediately (no payment needed upfront)
+          status: isPOD ? OrderStatus.CONFIRMED : OrderStatus.PENDING,
           paymentStatus: PaymentStatus.PENDING,
+          paymentMethod,
           customerNote,
           shippingAddress: {
             create: {
@@ -318,6 +323,11 @@ export class OrderService {
 
     if (order.status === 'CANCELLED')
       throw new BadRequestException('Cannot pay for a cancelled order');
+
+    if (order.paymentMethod === 'pay_on_delivery')
+      throw new BadRequestException(
+        'This order is set to pay on delivery. No online payment required.',
+      );
 
     if (order.paidAt) throw new BadRequestException('Order is already paid');
 

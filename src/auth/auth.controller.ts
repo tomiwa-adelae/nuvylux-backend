@@ -3,9 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
-  Param,
   Post,
-  Put,
   Req,
   Request,
   Res,
@@ -27,21 +25,24 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Request() req, @Res() res: Response) {
-    const loginResponse = await this.authService.login(req.user);
-
-    // Normal login flow
-    const { access_token, refresh_token, user } = loginResponse;
+    const { access_token, refresh_token, user } =
+      await this.authService.login(req.user);
 
     const cookieOptions = this.authService.getCookieOptions();
+    const sessionMs = this.authService.getSessionMs(); // 30 days
 
+    // The refresh token cookie lives for the full 30-day session.
+    // The access token cookie also gets a 30-day maxAge so the browser never
+    // drops it early — but the JWT inside expires in 15 min, triggering a
+    // silent refresh via the axios interceptor.
     res.cookie('refreshToken', refresh_token, {
       ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: sessionMs,
     });
 
     res.cookie('accessToken', access_token, {
       ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: sessionMs,
     });
 
     return res.json({ user, message: `Welcome back, ${user.firstName}` });
@@ -57,15 +58,16 @@ export class AuthController {
       await this.authService.register(registerUser);
 
     const cookieOptions = this.authService.getCookieOptions();
+    const sessionMs = this.authService.getSessionMs();
 
     res.cookie('refreshToken', refresh_token, {
       ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: sessionMs,
     });
 
     res.cookie('accessToken', access_token, {
       ...cookieOptions,
-      maxAge: 1 * 24 * 60 * 60 * 1000, // 15 minutes
+      maxAge: sessionMs,
     });
 
     return res.json({ user, message: `Welcome to Nuvylux, ${user.firstName}` });
@@ -80,7 +82,6 @@ export class AuthController {
     }
 
     const cookieOptions = this.authService.getCookieOptions();
-
     res.clearCookie('refreshToken', cookieOptions);
     res.clearCookie('accessToken', cookieOptions);
 
@@ -102,32 +103,41 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: ExpressRequest, @Res() res: Response) {
-    const refreshToken = req.cookies?.refreshToken || req.cookies?.accessToken;
+    // Only read the dedicated refresh token cookie — never fall back to the
+    // access token cookie (they serve completely different purposes).
+    const refreshToken = req.cookies?.refreshToken;
 
-    if (!refreshToken)
+    if (!refreshToken) {
       return res
         .status(HttpStatus.UNAUTHORIZED)
         .json({ message: 'No refresh token found' });
+    }
 
     const result = await this.authService.refreshTokens(refreshToken);
 
-    if (!result)
+    if (!result) {
+      // Refresh token expired, revoked, or detected as reused — force login
+      const cookieOptions = this.authService.getCookieOptions();
+      res.clearCookie('refreshToken', cookieOptions);
+      res.clearCookie('accessToken', cookieOptions);
       return res
         .status(HttpStatus.UNAUTHORIZED)
-        .json({ message: 'Invalid refresh token' });
+        .json({ message: 'Session expired. Please log in again.' });
+    }
 
     const { accessToken, newRefreshToken, user } = result;
-
     const cookieOptions = this.authService.getCookieOptions();
+    const sessionMs = this.authService.getSessionMs();
 
+    // Rotate both cookies — the new refresh token resets the 30-day window
     res.cookie('refreshToken', newRefreshToken, {
       ...cookieOptions,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: sessionMs,
     });
 
     res.cookie('accessToken', accessToken, {
       ...cookieOptions,
-      maxAge: 1 * 24 * 60 * 60 * 1000,
+      maxAge: sessionMs,
     });
 
     return res.json({ user });

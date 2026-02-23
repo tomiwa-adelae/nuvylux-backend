@@ -150,7 +150,13 @@ export class OnboardingService {
           create: { userId, role: SystemRole.BRAND },
         });
 
-        // 6. Return fully included user object for the frontend store
+        // 6. Mark brand onboarding as complete
+        await tx.user.update({
+          where: { id: userId },
+          data: { brandOnboardingCompleted: true },
+        });
+
+        // 7. Return fully included user object for the frontend store
         const updatedUser = await tx.user.findUnique({
           where: { id: userId },
           include: {

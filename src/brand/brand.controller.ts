@@ -31,7 +31,6 @@ export class BrandController {
   @Get('details')
   @Roles(Role.USER, Role.BRAND)
   getBrandDetails(@Req() req: ExpressRequest) {
-    console.log('wass');
     return this.brandService.getBrandDetails(
       // @ts-ignore
       req?.user?.id!,

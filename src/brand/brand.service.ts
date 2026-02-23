@@ -15,8 +15,6 @@ export class BrandService {
   }
 
   async getBrandDetails(id: string) {
-    console.log(id);
-
     if (!id) throw new NotFoundException();
 
     const user = await this.prisma.user.findUnique({

@@ -44,8 +44,9 @@ model User {
   image      String?
   joinedDate String?
 
-  isDeleted           Boolean @default(false)
-  onboardingCompleted Boolean @default(false)
+  isDeleted                Boolean @default(false)
+  onboardingCompleted      Boolean @default(false)
+  brandOnboardingCompleted Boolean @default(false)
 
   interests String[]
 
@@ -388,6 +389,8 @@ model Service {
   deliveryTimeline String? // e.g., "3-5 business days" (for deliverables)
   deliveryMode     DeliveryMode @default(ONLINE)
   location         String? // if in-person
+  latitude         Float? // geocoded from location
+  longitude        Float? // geocoded from location
 
   // Booking Rules (JSON for flexibility)
   // Stores { bufferTime: 15, maxBookingsPerDay: 5, advanceNotice: 24 }

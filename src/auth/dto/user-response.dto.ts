@@ -31,6 +31,9 @@ export class UserResponseDto {
   @Expose()
   onboardingCompleted: boolean;
 
+  @Expose()
+  brandOnboardingCompleted: boolean;
+
   @Exclude()
   provider?: string;
 

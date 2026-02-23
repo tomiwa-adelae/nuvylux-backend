@@ -11,7 +11,21 @@ import { notDeleted } from 'src/utils/prismaFilters';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { randomUUID } from 'crypto';
 import { UpdateServiceDto } from './dto/update-service.dto';
-import { ServiceType } from '@prisma/client';
+import { DeliveryMode, ServiceType } from '@prisma/client';
+
+export interface ExploreServicesQuery {
+  type?: string;
+  search?: string;
+  deliveryMode?: string;
+  priceMin?: string;
+  priceMax?: string;
+  city?: string;
+  state?: string;
+  lat?: string;
+  lng?: string;
+  radius?: string; // km
+  sortBy?: 'newest' | 'price_asc' | 'price_desc' | 'distance';
+}
 
 @Injectable()
 export class ServicesService {
@@ -19,6 +33,58 @@ export class ServicesService {
     private prisma: PrismaService,
     private uploadService: UploadService,
   ) {}
+
+  // ────────────────────────────────────────────────────────────
+  // Geo utilities
+  // ────────────────────────────────────────────────────────────
+
+  private haversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private async geocodeLocation(
+    location: string,
+  ): Promise<{ lat: number; lng: number } | null> {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Nuvylux/1.0 (contact@nuvylux.com)',
+          Accept: 'application/json',
+        },
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as Array<{
+        lat: string;
+        lon: string;
+      }>;
+      if (data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Create
+  // ────────────────────────────────────────────────────────────
 
   async create(
     userId: string,
@@ -62,7 +128,6 @@ export class ServicesService {
     let counter = 1;
 
     while (await this.prisma.service.findUnique({ where: { slug } })) {
-      // Append a number if username exists
       slug = `${baseSlug}-${1}`;
       counter++;
     }
@@ -78,6 +143,20 @@ export class ServicesService {
       }
       return data || [];
     };
+
+    // Geocode location for in-person / hybrid services (non-blocking)
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+    if (
+      dto.location &&
+      (dto.deliveryMode === 'IN_PERSON' || dto.deliveryMode === 'HYBRID')
+    ) {
+      const coords = await this.geocodeLocation(dto.location);
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+      }
+    }
 
     const service = await this.prisma.service.create({
       data: {
@@ -95,6 +174,8 @@ export class ServicesService {
         deliveryMode: dto.deliveryMode,
         currency: dto.currency,
         location: dto.location,
+        latitude,
+        longitude,
         pricingType: dto.pricingType,
         duration: dto.duration,
         deliveryTimeline: dto.deliveryTimeline,
@@ -102,10 +183,8 @@ export class ServicesService {
         cancellationPolicy: dto.cancellationPolicy,
         bookingRules: dto.bookingRules,
         professionalProfile: {
-          // Now this is safe because we checked above
           connect: { id: user.professionalProfile.id },
         },
-        // Images
         thumbnail: thumbResult[0],
         images: galleryResults,
       },
@@ -113,6 +192,10 @@ export class ServicesService {
 
     return { message: 'Service successfully created', service };
   }
+
+  // ────────────────────────────────────────────────────────────
+  // Read (professional)
+  // ────────────────────────────────────────────────────────────
 
   async findAllByProfessional(userId: string) {
     if (!userId) {
@@ -122,10 +205,10 @@ export class ServicesService {
     const services = await this.prisma.service.findMany({
       where: {
         userId: userId,
-        ...notDeleted(), // Ensure we only get active/draft services
+        ...notDeleted(),
       },
       orderBy: {
-        createdAt: 'desc', // Show newest first
+        createdAt: 'desc',
       },
     });
 
@@ -150,6 +233,10 @@ export class ServicesService {
     return service;
   }
 
+  // ────────────────────────────────────────────────────────────
+  // Update
+  // ────────────────────────────────────────────────────────────
+
   async update(
     id: string,
     dto: UpdateServiceDto,
@@ -158,11 +245,10 @@ export class ServicesService {
     existingThumbnail?: string,
     existingImages: string[] = [],
   ) {
-    // 1. Check if product exists
     const service = await this.prisma.service.findUnique({ where: { id } });
     if (!service) throw new NotFoundException('Service not found');
 
-    // 2. Handle Thumbnail
+    // Handle Thumbnail
     let finalThumbnail = existingThumbnail || service.thumbnail;
     if (newThumbnail) {
       const uploadResult = await this.uploadService.uploadServicesImages(id, [
@@ -171,7 +257,7 @@ export class ServicesService {
       finalThumbnail = uploadResult[0];
     }
 
-    // 3. Handle Gallery Images (Merge existing URLs with newly uploaded files)
+    // Handle Gallery Images
     let finalGallery = existingImages;
     if (newGallery.length > 0) {
       const newUploadedUrls = await this.uploadService.uploadServicesImages(
@@ -181,7 +267,7 @@ export class ServicesService {
       finalGallery = [...existingImages, ...newUploadedUrls];
     }
 
-    // 4. Handle Slug (Only if name changed)
+    // Handle Slug
     let slug = service.slug;
     if (dto.name && dto.name !== service.name) {
       let baseSlug = slugify(dto.name, { lower: true });
@@ -197,7 +283,28 @@ export class ServicesService {
       }
     }
 
-    // 5. Update in Database
+    // Re-geocode if location changed
+    let latitude: number | null | undefined = undefined; // undefined = don't update
+    let longitude: number | null | undefined = undefined;
+    const locationChanged =
+      dto.location !== undefined && dto.location !== service.location;
+    const newLocation = dto.location ?? service.location;
+    const newMode = dto.deliveryMode ?? service.deliveryMode;
+
+    if (
+      locationChanged &&
+      newLocation &&
+      (newMode === 'IN_PERSON' || newMode === 'HYBRID')
+    ) {
+      const coords = await this.geocodeLocation(newLocation);
+      latitude = coords?.lat ?? null;
+      longitude = coords?.lng ?? null;
+    } else if (locationChanged && !newLocation) {
+      // Location was cleared
+      latitude = null;
+      longitude = null;
+    }
+
     const updatedService = await this.prisma.service.update({
       where: { id },
       data: {
@@ -214,6 +321,8 @@ export class ServicesService {
         type: dto.type,
         deliveryMode: dto.deliveryMode,
         location: dto.location,
+        ...(latitude !== undefined && { latitude }),
+        ...(longitude !== undefined && { longitude }),
         currency: dto.currency,
         pricingType: dto.pricingType,
         cancellationPolicy: dto.cancellationPolicy,
@@ -223,44 +332,157 @@ export class ServicesService {
     return { message: 'Service updated successfully', service: updatedService };
   }
 
-  async getPublicServices(
-    userId?: string,
-    query?: { type?: string; search?: string },
-  ) {
+  // ────────────────────────────────────────────────────────────
+  // Public explore with location filtering
+  // ────────────────────────────────────────────────────────────
+
+  async getPublicServices(userId?: string, query?: ExploreServicesQuery) {
+    const userLat = query?.lat ? parseFloat(query.lat) : undefined;
+    const userLng = query?.lng ? parseFloat(query.lng) : undefined;
+    const radius = query?.radius ? parseFloat(query.radius) : undefined;
+
+    // Build price filter
+    const priceFilter: Record<string, number> = {};
+    if (query?.priceMin) priceFilter.gte = parseFloat(query.priceMin);
+    if (query?.priceMax) priceFilter.lte = parseFloat(query.priceMax);
+
+    // Determine DB-level sort (distance sort happens in JS after fetch)
+    const dbOrderBy =
+      query?.sortBy === 'price_asc'
+        ? { price: 'asc' as const }
+        : query?.sortBy === 'price_desc'
+          ? { price: 'desc' as const }
+          : { createdAt: 'desc' as const };
+
+    // Build location text filter (city/state matching)
+    // Only applied when we don't have coordinates (to narrow results)
+    const locationWhereClause =
+      !userLat && (query?.city || query?.state)
+        ? {
+            OR: [
+              ...(query.city
+                ? [
+                    {
+                      user: {
+                        city: { contains: query.city, mode: 'insensitive' as const },
+                      },
+                    },
+                    {
+                      location: {
+                        contains: query.city,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  ]
+                : []),
+              ...(query.state
+                ? [
+                    {
+                      user: {
+                        state: {
+                          contains: query.state,
+                          mode: 'insensitive' as const,
+                        },
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          }
+        : {};
+
     const services = await this.prisma.service.findMany({
       where: {
-        status: 'ACTIVE', // Only show live services to clients
+        status: 'ACTIVE',
         ...notDeleted(),
         ...(query?.type && { type: query.type as ServiceType }),
+        ...(query?.deliveryMode && {
+          deliveryMode: query.deliveryMode as DeliveryMode,
+        }),
         ...(query?.search && {
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
             {
-              shortDescription: { contains: query.search, mode: 'insensitive' },
+              shortDescription: {
+                contains: query.search,
+                mode: 'insensitive',
+              },
             },
+            { location: { contains: query.search, mode: 'insensitive' } },
           ],
         }),
+        ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),
+        ...locationWhereClause,
       },
       include: {
-        // Essential for the Service Card UI
         professionalProfile: {
           select: {
             id: true,
             profession: true,
-            user: { select: { firstName: true, lastName: true, image: true } },
+            businessName: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                image: true,
+                city: true,
+                state: true,
+                country: true,
+              },
+            },
           },
         },
-        // If you have a "SavedServices" table similar to products
-        // savedBy: userId ? { where: { userId: userId } } : false,
+        user: {
+          select: { city: true, state: true, country: true },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: dbOrderBy,
     });
 
-    return services.map((service) => ({
-      ...service,
-      // isSaved: service.savedBy ? service.savedBy.length > 0 : false,
-    }));
+    // Attach distance to every service
+    let servicesWithDistance = services.map((service) => {
+      let distance: number | null = null;
+
+      if (userLat !== undefined && userLng !== undefined) {
+        // Prefer service-level coordinates (IN_PERSON services)
+        if (service.latitude !== null && service.longitude !== null) {
+          distance = this.haversineDistance(
+            userLat,
+            userLng,
+            service.latitude,
+            service.longitude,
+          );
+        }
+      }
+
+      return { ...service, distance };
+    });
+
+    // Filter by radius when coordinates are available
+    if (userLat !== undefined && userLng !== undefined && radius) {
+      servicesWithDistance = servicesWithDistance.filter(
+        (s) =>
+          // Include services without coordinates (ONLINE) or within radius
+          s.distance === null || s.distance <= radius,
+      );
+    }
+
+    // Sort by distance if requested
+    if (query?.sortBy === 'distance' && userLat !== undefined) {
+      servicesWithDistance.sort((a, b) => {
+        if (a.distance === null && b.distance === null) return 0;
+        if (a.distance === null) return 1; // push no-coords to end
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+    }
+
+    return servicesWithDistance;
   }
+
+  // ────────────────────────────────────────────────────────────
+  // Public service details
+  // ────────────────────────────────────────────────────────────
 
   async getPublicServiceDetails(slug: string, userId?: string) {
     const service = await this.prisma.service.findFirst({
@@ -273,11 +495,17 @@ export class ServicesService {
         professionalProfile: {
           include: {
             user: {
-              select: { firstName: true, lastName: true, image: true },
+              select: {
+                firstName: true,
+                lastName: true,
+                image: true,
+                city: true,
+                state: true,
+                country: true,
+              },
             },
           },
         },
-        // Include other services by this same professional for the "More from" section
         user: {
           include: {
             services: {

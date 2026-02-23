@@ -36,6 +36,11 @@ export interface JwtPayload {
   isTwoFactorAuthenticated?: boolean;
 }
 
+// 30-day sessions: users stay logged in for 30 days of inactivity.
+// Every refresh rotates the token, so active users never expire.
+const SESSION_DURATION = '30d';
+const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -45,7 +50,6 @@ export class AuthService {
 
   getAcronym(name?: string) {
     if (!name) return 'EMS';
-
     const words = name.trim().split(/\s+/);
     return words
       .slice(0, 3)
@@ -64,30 +68,28 @@ export class AuthService {
 
   getCookieOptions() {
     const isProd = process.env.NODE_ENV === 'production';
-
     return {
       httpOnly: true,
       secure: isProd,
-      // 'none' is required for cross-domain cookies (Vercel <-> Render).
-      // 'lax' is fine for same-origin local dev.
       sameSite: isProd ? ('none' as const) : ('lax' as const),
-      // Do NOT set domain when frontend and backend are on different TLDs.
-      // The browser scopes the cookie to the backend's own domain automatically.
       path: '/',
     };
   }
 
+  // Access tokens are short-lived (15 min) — the axios interceptor refreshes
+  // them silently so the user never notices.
   generateAccessToken(payload: JwtPayload): string {
     return this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET,   // validated by JwtStrategy
       expiresIn: '15m',
     });
   }
 
+  // Refresh tokens are long-lived (30 days) and rotated on every use.
   generateRefreshToken(payload: JwtPayload): string {
     return this.jwtService.sign(payload, {
       secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: '7d',
+      expiresIn: SESSION_DURATION,
     });
   }
 
@@ -108,7 +110,6 @@ export class AuthService {
 
     if (await bcrypt.compare(password, user.password)) {
       const { password, refreshToken, ...result } = user;
-
       return result;
     }
 
@@ -116,7 +117,6 @@ export class AuthService {
   }
 
   async login(user: any) {
-    // Normal login flow (no 2FA required)
     const payload: JwtPayload = {
       email: user.email,
       sub: user.id,
@@ -126,6 +126,8 @@ export class AuthService {
     const accessToken = this.generateAccessToken(payload);
     const refreshToken = this.generateRefreshToken(payload);
 
+    // Store plain-text refresh token — refreshTokens() does a direct string
+    // comparison (consistent with existing records in the DB).
     const updatedUser = await this.prisma.user.update({
       where: { id: user.id },
       data: { refreshToken },
@@ -159,7 +161,6 @@ export class AuthService {
     let counter = 1;
 
     while (await this.prisma.user.findUnique({ where: { username } })) {
-      // Append a number if username exists
       username = `${baseUsername}-${counter}`;
       counter++;
     }
@@ -192,7 +193,6 @@ export class AuthService {
     });
 
     const { password, refreshToken, ...result } = user;
-
     return this.login(result);
   }
 
@@ -222,12 +222,8 @@ export class AuthService {
     });
 
     if (!user) throw new NotFoundException('No account with that email');
-
-    if (!user.resetOTP)
-      throw new UnauthorizedException('Invalid or expired OTP');
-
-    if (user.resetOTPExpiry! < new Date())
-      throw new UnauthorizedException('OTP has expired');
+    if (!user.resetOTP) throw new UnauthorizedException('Invalid or expired OTP');
+    if (user.resetOTPExpiry! < new Date()) throw new UnauthorizedException('OTP has expired');
 
     const isValid = await bcrypt.compare(otp, user.resetOTP);
     if (!isValid) throw new UnauthorizedException('Invalid OTP');
@@ -254,12 +250,8 @@ export class AuthService {
     });
 
     if (!user) throw new NotFoundException('No account with that email');
-
-    if (!user.resetOTP)
-      throw new UnauthorizedException('Invalid or expired OTP');
-
-    if (user.resetOTPExpiry! < new Date())
-      throw new UnauthorizedException('OTP has expired');
+    if (!user.resetOTP) throw new UnauthorizedException('Invalid or expired OTP');
+    if (user.resetOTPExpiry! < new Date()) throw new UnauthorizedException('OTP has expired');
 
     const isValid = await bcrypt.compare(otp, user.resetOTP);
     if (!isValid) throw new UnauthorizedException('Invalid OTP');
@@ -283,7 +275,6 @@ export class AuthService {
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
-
     const hashedOTP = await bcrypt.hash(otp, 10);
 
     await this.prisma.user.update({
@@ -311,59 +302,87 @@ export class AuthService {
     return { message: 'Password reset OTP sent to your email' };
   }
 
+  // ── Logout ───────────────────────────────────────────────────────────────
+  // Verify the JWT to get the user ID directly (O(1), no full-table scan).
+  // We allow expired tokens so logout still works after long inactivity.
   async logout(refreshToken: string) {
-    const users = await this.prisma.user.findMany({
-      where: {},
-      select: { id: true, refreshToken: true },
-    });
+    try {
+      const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+        ignoreExpiration: true,
+      });
 
-    for (const user of users) {
-      if (user.refreshToken && refreshToken === user.refreshToken) {
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: { refreshToken: null },
-        });
-      }
+      await this.prisma.user.update({
+        where: { id: payload.sub },
+        data: { refreshToken: null },
+      });
+    } catch {
+      // Malformed / tampered token — ignore, cookies are cleared by controller
     }
 
     return { message: 'User logged out' };
   }
 
+  // ── Token refresh ─────────────────────────────────────────────────────────
+  // 1. Verify the refresh token JWT (checks signature + expiry)
+  // 2. Fetch the user by the ID in the payload — O(1) lookup
+  // 3. Confirm the stored DB token matches the incoming one (detects reuse after rotation)
+  // 4. Rotate: issue a fresh access token (JWT_SECRET) + refresh token (JWT_REFRESH_SECRET)
   async refreshTokens(refreshToken: string) {
-    const users = await this.prisma.user.findMany({
-      where: { refreshToken: { not: null } },
+    // Step 1 — validate the JWT itself
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+    } catch {
+      return null; // expired or tampered
+    }
+
+    // Step 2 — load the user by ID embedded in the token
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
+        role: true,
+        onboardingCompleted: true,
         refreshToken: true,
       },
     });
 
-    for (const user of users) {
-      const match = user.refreshToken === refreshToken;
-
-      if (match) {
-        // valid refresh token
-        const accessToken = this.jwtService.sign(
-          { sub: user.id },
-          { expiresIn: '15m' },
-        );
-        const newRefreshToken = this.jwtService.sign(
-          { sub: user.id },
-          { expiresIn: '7d' },
-        );
-
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: { refreshToken: newRefreshToken },
-        });
-
-        return { accessToken, newRefreshToken, user };
-      } else {
-      }
+    if (!user || !user.refreshToken) {
+      return null; // deleted user or already logged out
     }
-    return null;
+
+    // Step 3 — confirm the token matches what we stored (plain-text)
+    if (user.refreshToken !== refreshToken) {
+      // Possible refresh-token-reuse attack: revoke all tokens for this user
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken: null },
+      });
+      return null;
+    }
+
+    // Step 4 — rotate tokens
+    const newPayload: JwtPayload = { sub: user.id, email: user.email };
+    const accessToken = this.generateAccessToken(newPayload);      // JWT_SECRET
+    const newRefreshToken = this.generateRefreshToken(newPayload); // JWT_REFRESH_SECRET
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { refreshToken: newRefreshToken },
+    });
+
+    const { refreshToken: _omit, ...safeUser } = user;
+    return { accessToken, newRefreshToken, user: safeUser };
+  }
+
+  // Expose session duration in ms so the controller can set consistent cookie maxAge
+  getSessionMs(): number {
+    return SESSION_MS;
   }
 }

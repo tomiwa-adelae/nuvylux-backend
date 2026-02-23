@@ -6,6 +6,7 @@ import {
   ValidateNested,
   Min,
   IsOptional,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -61,4 +62,9 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(0)
   totalAmount: number;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['online', 'pay_on_delivery'])
+  paymentMethod?: string;
 }

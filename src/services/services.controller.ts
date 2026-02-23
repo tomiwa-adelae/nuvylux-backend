@@ -137,15 +137,36 @@ export class ServicesController {
   }
 
   @Get('/public/explore')
-  @Public() // If your setup requires this to bypass JwtAuthGuard
+  @Public()
   async getExploreServices(
     @Req() req: ExpressRequest,
     @Query('type') type?: string,
     @Query('search') search?: string,
+    @Query('deliveryMode') deliveryMode?: string,
+    @Query('priceMin') priceMin?: string,
+    @Query('priceMax') priceMax?: string,
+    @Query('city') city?: string,
+    @Query('state') state?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radius') radius?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     // @ts-ignore - userId is optional here
     const userId = req.user?.id;
-    return this.servicesService.getPublicServices(userId, { type, search });
+    return this.servicesService.getPublicServices(userId, {
+      type,
+      search,
+      deliveryMode,
+      priceMin,
+      priceMax,
+      city,
+      state,
+      lat,
+      lng,
+      radius,
+      sortBy: sortBy as any,
+    });
   }
 
   @Get('public/:slug')
