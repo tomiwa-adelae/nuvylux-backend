@@ -409,6 +409,16 @@ export class ServicesService {
               },
             },
             { location: { contains: query.search, mode: 'insensitive' } },
+            {
+              professionalProfile: {
+                profession: { contains: query.search, mode: 'insensitive' },
+              },
+            },
+            {
+              professionalProfile: {
+                businessName: { contains: query.search, mode: 'insensitive' },
+              },
+            },
           ],
         }),
         ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { notDeleted } from 'src/utils/prismaFilters';
 
 @Injectable()
 export class BrandService {
@@ -31,6 +32,42 @@ export class BrandService {
     if (!brand) throw new NotFoundException('Oops! Brand not found');
 
     return brand;
+  }
+
+  async getPublicBrands(query?: { search?: string; brandType?: string }) {
+    return this.prisma.brand.findMany({
+      where: {
+        ...notDeleted(),
+        ...(query?.brandType && { brandType: query.brandType }),
+        ...(query?.search && {
+          OR: [
+            { brandName: { contains: query.search, mode: 'insensitive' } },
+            { description: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }),
+      },
+      select: {
+        id: true,
+        brandName: true,
+        brandLogo: true,
+        brandType: true,
+        description: true,
+        website: true,
+        brandColor: true,
+        socials: true,
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            image: true,
+            city: true,
+            state: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   update(id: number, updateBrandDto: UpdateBrandDto) {

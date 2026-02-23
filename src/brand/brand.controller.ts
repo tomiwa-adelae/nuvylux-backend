@@ -8,6 +8,7 @@ import {
   Delete,
   Req,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { BrandService } from './brand.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -17,11 +18,21 @@ import { Role } from 'src/common/enums/role.enum';
 import type { Response, Request as ExpressRequest } from 'express';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guards';
+import { Public } from 'src/decorators/public.decorator';
 
 @Controller('brand')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class BrandController {
   constructor(private readonly brandService: BrandService) {}
+
+  @Get('public/explore')
+  @Public()
+  getPublicBrands(
+    @Query('search') search?: string,
+    @Query('brandType') brandType?: string,
+  ) {
+    return this.brandService.getPublicBrands({ search, brandType });
+  }
 
   @Post()
   create(@Body() createBrandDto: CreateBrandDto) {
