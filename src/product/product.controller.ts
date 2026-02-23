@@ -136,11 +136,15 @@ export class ProductController {
     @Req() req: ExpressRequest,
     @Query('category') category: string,
     @Query('search') search: string,
+    @Query('sortBy') sortBy: string,
+    @Query('minRating') minRating: string,
   ) {
     // @ts-ignore
     return this.productService.getPublicProducts(req?.user?.id!, {
       category,
       search,
+      sortBy,
+      minRating,
     });
   }
 

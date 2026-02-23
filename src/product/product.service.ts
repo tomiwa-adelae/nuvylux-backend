@@ -245,7 +245,12 @@ export class ProductService {
 
   async getPublicProducts(
     userId?: string,
-    query?: { category?: string; search?: string },
+    query?: {
+      category?: string;
+      search?: string;
+      sortBy?: string;
+      minRating?: string;
+    },
   ) {
     const products = await this.prisma.product.findMany({
       where: {
@@ -264,18 +269,44 @@ export class ProductService {
           select: { brandName: true, brandLogo: true },
         },
         savedBy: userId ? { where: { userId: userId } } : false,
+        reviews: {
+          where: { isDeleted: false },
+          select: { rating: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Transform the data to include a simple boolean "isSaved"
-    return products.map((product) => {
-      const { savedBy, ...rest } = product;
+    // Compute average rating for each product
+    let result = products.map((product) => {
+      const { savedBy, reviews, ...rest } = product;
+      const reviewCount = reviews.length;
+      const averageRating =
+        reviewCount > 0
+          ? Math.round(
+              (reviews.reduce((s, r) => s + r.rating, 0) / reviewCount) * 10,
+            ) / 10
+          : 0;
       return {
         ...rest,
         isSaved: savedBy ? savedBy.length > 0 : false,
+        averageRating,
+        reviewCount,
       };
     });
+
+    // Filter by minimum rating
+    if (query?.minRating) {
+      const min = parseFloat(query.minRating);
+      result = result.filter((p) => p.averageRating >= min);
+    }
+
+    // Sort by rating (highest first); fallback for ties: newer products first
+    if (query?.sortBy === 'rating') {
+      result.sort((a, b) => b.averageRating - a.averageRating);
+    }
+
+    return result;
   }
 
   async getPublicProductDetails(slug: string, userId?: string) {

@@ -151,6 +151,7 @@ export class ServicesController {
     @Query('lng') lng?: string,
     @Query('radius') radius?: string,
     @Query('sortBy') sortBy?: string,
+    @Query('minRating') minRating?: string,
   ) {
     // @ts-ignore - userId is optional here
     const userId = req.user?.id;
@@ -166,6 +167,7 @@ export class ServicesController {
       lng,
       radius,
       sortBy: sortBy as any,
+      minRating,
     });
   }
 

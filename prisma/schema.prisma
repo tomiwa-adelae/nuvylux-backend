@@ -63,6 +63,7 @@ model User {
   // This user acting as a PROVIDER (the one who owns the service)
   services        Service[]
   serviceBookings ServiceBooking[]
+  reviews         Review[]
 }
 
 enum AdminPosition {
@@ -169,6 +170,7 @@ model Product {
   savedBy    Saved[]
   cartItems  CartItem[]
   orderItems OrderItem[]
+  reviews    Review[]
 
   @@index([brandId])
 }
@@ -412,6 +414,7 @@ model Service {
   professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id])
   professionalProfileId String
   bookings              ServiceBooking[]
+  reviews               Review[]
 
   @@index([userId])
   @@index([status])
@@ -461,4 +464,28 @@ enum BookingStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+model Review {
+  id      String  @id @default(uuid())
+  rating  Int     // 1–5
+  comment String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@unique([userId, serviceId])
+  @@index([productId])
+  @@index([serviceId])
 }

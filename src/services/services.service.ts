@@ -24,7 +24,8 @@ export interface ExploreServicesQuery {
   lat?: string;
   lng?: string;
   radius?: string; // km
-  sortBy?: 'newest' | 'price_asc' | 'price_desc' | 'distance';
+  sortBy?: 'newest' | 'price_asc' | 'price_desc' | 'distance' | 'rating';
+  minRating?: string;
 }
 
 @Injectable()
@@ -346,7 +347,7 @@ export class ServicesService {
     if (query?.priceMin) priceFilter.gte = parseFloat(query.priceMin);
     if (query?.priceMax) priceFilter.lte = parseFloat(query.priceMax);
 
-    // Determine DB-level sort (distance sort happens in JS after fetch)
+    // Determine DB-level sort (distance/rating sort happens in JS after fetch)
     const dbOrderBy =
       query?.sortBy === 'price_asc'
         ? { price: 'asc' as const }
@@ -445,12 +446,16 @@ export class ServicesService {
         user: {
           select: { city: true, state: true, country: true },
         },
+        reviews: {
+          where: { isDeleted: false },
+          select: { rating: true },
+        },
       },
       orderBy: dbOrderBy,
     });
 
-    // Attach distance to every service
-    let servicesWithDistance = services.map((service) => {
+    // Attach distance + rating stats to every service
+    let servicesWithStats = services.map((service) => {
       let distance: number | null = null;
 
       if (userLat !== undefined && userLng !== undefined) {
@@ -465,12 +470,29 @@ export class ServicesService {
         }
       }
 
-      return { ...service, distance };
+      const reviewCount = service.reviews.length;
+      const averageRating =
+        reviewCount > 0
+          ? service.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
+          : 0;
+
+      const { reviews: _reviews, ...rest } = service;
+      return { ...rest, distance, averageRating, reviewCount };
     });
+
+    // Filter by minRating if provided
+    if (query?.minRating) {
+      const min = parseFloat(query.minRating);
+      if (!isNaN(min)) {
+        servicesWithStats = servicesWithStats.filter(
+          (s) => s.averageRating >= min,
+        );
+      }
+    }
 
     // Filter by radius when coordinates are available
     if (userLat !== undefined && userLng !== undefined && radius) {
-      servicesWithDistance = servicesWithDistance.filter(
+      servicesWithStats = servicesWithStats.filter(
         (s) =>
           // Include services without coordinates (ONLINE) or within radius
           s.distance === null || s.distance <= radius,
@@ -479,7 +501,7 @@ export class ServicesService {
 
     // Sort by distance if requested
     if (query?.sortBy === 'distance' && userLat !== undefined) {
-      servicesWithDistance.sort((a, b) => {
+      servicesWithStats.sort((a, b) => {
         if (a.distance === null && b.distance === null) return 0;
         if (a.distance === null) return 1; // push no-coords to end
         if (b.distance === null) return -1;
@@ -487,7 +509,12 @@ export class ServicesService {
       });
     }
 
-    return servicesWithDistance;
+    // Sort by rating if requested
+    if (query?.sortBy === 'rating') {
+      servicesWithStats.sort((a, b) => b.averageRating - a.averageRating);
+    }
+
+    return servicesWithStats;
   }
 
   // ────────────────────────────────────────────────────────────
