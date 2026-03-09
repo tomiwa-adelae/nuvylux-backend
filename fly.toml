@@ -1,0 +1,24 @@
+# fly.toml app configuration file generated for nuvylux-backend-frosty-snow-1844 on 2026-03-09T12:52:55+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'nuvylux-backend-frosty-snow-1844'
+primary_region = 'lhr'
+
+[build]
+
+[deploy]
+
+[http_service]
+  internal_port = 10000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024
