@@ -34,6 +34,61 @@ export class BrandService {
     return brand;
   }
 
+  async getPublicBrandById(id: string) {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id, isDeleted: false },
+      select: {
+        id: true,
+        brandName: true,
+        brandLogo: true,
+        brandType: true,
+        description: true,
+        website: true,
+        brandColor: true,
+        socials: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            image: true,
+            city: true,
+            state: true,
+          },
+        },
+        products: {
+          where: { status: 'PUBLISHED', isDeleted: false },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            shortDescription: true,
+            description: true,
+            price: true,
+            compareAtPrice: true,
+            thumbnail: true,
+            images: true,
+            sizes: true,
+            availableColors: true,
+            category: true,
+            isFeatured: true,
+            stock: true,
+            sku: true,
+            status: true,
+            brandId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+    });
+
+    if (!brand) throw new NotFoundException('Brand not found');
+    return brand;
+  }
+
   async getPublicBrands(query?: { search?: string; brandType?: string }) {
     return this.prisma.brand.findMany({
       where: {

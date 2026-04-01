@@ -34,6 +34,12 @@ export class BrandController {
     return this.brandService.getPublicBrands({ search, brandType });
   }
 
+  @Get('public/:id')
+  @Public()
+  getPublicBrandById(@Param('id') id: string) {
+    return this.brandService.getPublicBrandById(id);
+  }
+
   @Post()
   create(@Body() createBrandDto: CreateBrandDto) {
     return this.brandService.create(createBrandDto);
