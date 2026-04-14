@@ -133,10 +133,19 @@ export class AuthService {
       data: { refreshToken },
     });
 
+    let adminPosition: string | null = null;
+    if (updatedUser.role === 'ADMINISTRATOR') {
+      const adminRecord = await this.prisma.admin.findUnique({
+        where: { userId: user.id },
+        select: { position: true },
+      });
+      adminPosition = adminRecord?.position ?? null;
+    }
+
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
-      user: plainToClass(UserResponseDto, updatedUser, {
+      user: plainToClass(UserResponseDto, { ...updatedUser, adminPosition }, {
         excludeExtraneousValues: true,
       }),
     };
@@ -208,12 +217,14 @@ export class AuthService {
         updatedAt: true,
         role: true,
         onboardingCompleted: true,
+        admin: { select: { position: true } },
       },
     });
 
     if (!user) throw new ConflictException('Oops! User not found');
 
-    return user;
+    const { admin, ...rest } = user;
+    return { ...rest, adminPosition: admin?.position ?? null };
   }
 
   async verifyCode(otp: string, email: string) {

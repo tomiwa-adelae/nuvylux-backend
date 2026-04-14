@@ -35,4 +35,20 @@ export class UploadController {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.uploadService.uploadBrandLogo(userId, file);
   }
+
+  /** Upload an image for use inside the rich-text editor. Returns { url }. */
+  @Post('editor-image')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadEditorImage(@UploadedFile() file: any) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.uploadService.uploadEditorImage(file);
+  }
+
+  /** Upload a blog post cover image. Returns { url }. */
+  @Post('post-cover')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPostCover(@UploadedFile() file: any) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.uploadService.uploadPostCover(file);
+  }
 }

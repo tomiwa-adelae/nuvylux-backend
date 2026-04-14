@@ -218,4 +218,32 @@ export class UploadService {
 
     return Promise.all(uploadPromises);
   }
+
+  /** Upload an image for the rich-text editor (no user association). */
+  async uploadEditorImage(file: any): Promise<{ url: string }> {
+    const key = `editor-images/${randomUUID()}-${file.originalname}`;
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }),
+    );
+    return { url: `${this.publicUrl}/${key}` };
+  }
+
+  /** Upload a blog post cover image. Returns { url }. */
+  async uploadPostCover(file: any): Promise<{ url: string }> {
+    const key = `post-covers/${randomUUID()}-${file.originalname}`;
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }),
+    );
+    return { url: `${this.publicUrl}/${key}` };
+  }
 }

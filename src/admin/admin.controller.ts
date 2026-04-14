@@ -16,11 +16,12 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guards';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from 'src/common/enums/role.enum';
+import { AdminGuard } from 'src/guards/admin.guard';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminPosition } from '@prisma/client';
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminGuard)
 @Roles(Role.ADMINISTRATOR)
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

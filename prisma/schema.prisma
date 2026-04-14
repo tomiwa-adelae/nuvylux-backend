@@ -64,12 +64,14 @@ model User {
   services        Service[]
   serviceBookings ServiceBooking[]
   reviews         Review[]
+  posts           Post[]           @relation("AuthoredPosts")
 }
 
 enum AdminPosition {
   SUPER_ADMIN
   ADMIN
   MODERATOR
+  CONTENT_WRITER
 }
 
 model Admin {
@@ -468,7 +470,7 @@ enum BookingStatus {
 
 model Review {
   id      String  @id @default(uuid())
-  rating  Int     // 1–5
+  rating  Int // 1–5
   comment String?
 
   userId String
@@ -488,4 +490,22 @@ model Review {
   @@unique([userId, serviceId])
   @@index([productId])
   @@index([serviceId])
+}
+
+// Blog Posts
+model Post {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  excerpt     String?   @db.Text
+  body        String    @db.Text
+  coverImage  String?
+  category    String    @default("OTHER")
+  status      String    @default("DRAFT")
+  tags        String[]
+  publishedAt DateTime?
+  authorId    String
+  author      User      @relation("AuthoredPosts", fields: [authorId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

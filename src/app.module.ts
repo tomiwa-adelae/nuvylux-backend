@@ -15,9 +15,25 @@ import { ServicesModule } from './services/services.module';
 import { BookModule } from './book/book.module';
 import { AdminModule } from './admin/admin.module';
 import { ReviewModule } from './review/review.module';
+import { BlogModule } from './blog/blog.module';
 
 @Module({
-  imports: [AuthModule, OnboardingModule, UploadModule, ProductModule, BrandModule, SavedModule, CartModule, OrderModule, UserModule, ServicesModule, BookModule, AdminModule, ReviewModule],
+  imports: [
+    AuthModule,
+    OnboardingModule,
+    UploadModule,
+    ProductModule,
+    BrandModule,
+    SavedModule,
+    CartModule,
+    OrderModule,
+    UserModule,
+    ServicesModule,
+    BookModule,
+    AdminModule,
+    ReviewModule,
+    BlogModule,
+  ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })
